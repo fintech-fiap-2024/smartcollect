@@ -1,0 +1,107 @@
+# =========================================================================
+# ARQUIVO: .github/workflows/main.yml
+# =========================================================================
+
+name: CI/CD do Projeto SmartCollect
+
+# O pipeline é disparado sempre que houver um push na branch 'main'
+on:
+  push:
+    branches:
+      - main
+
+env:
+  # Nome da Imagem no Docker Hub - SUBSTITUA PELO SEU USUÁRIO
+  DOCKER_IMAGE_NAME: SYSTEM/smartcollect-esg
+  DOCKER_REGISTRY: docker.io
+  TAG: ${{ github.sha }}
+
+jobs:
+  # 1. BUILD E TESTES AUTOMATIZADOS (CI)
+  build_and_test:
+    name: Build e Testes com Maven
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+      - name: Setup JDK 21 e Cache Maven
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: Executar Build e Testes
+        run: mvn clean install
+      - name: Upload JAR como Artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-jar
+          path: target/smartcollect-0.0.1-SNAPSHOT.jar
+
+  # 2. BUILD E PUSH DA IMAGEM DOCKER
+  build_push_docker:
+    name: Build e Push da Imagem
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: application-jar
+          path: target/
+      - name: Login no Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build e Push da Imagem
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+  # 3. DEPLOY EM STAGING (CD)
+  deploy_staging:
+    name: Deploy em Staging
+    needs: build_push_docker
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy no Servidor Staging
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_PRIVATE_KEY }}
+          script: |
+            echo "ORACLE_PASSWORD=${{ secrets.ORACLE_STAGING_PWD }}" > .env-staging
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }} ${{ env.DOCKER_REGISTRY }}
+            docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+            docker compose -f docker-compose.yml --env-file .env-staging -p smartcollect-staging up -d --force-recreate
+
+  # 4. DEPLOY EM PRODUÇÃO (CD com Aprovação)
+  deploy_production:
+    name: Deploy em Produção
+    needs: deploy_staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://smartcollect.seusite.com
+
+    steps:
+      - name: Deploy no Servidor de Produção
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_PRIVATE_KEY }}
+          script: |
+            echo "ORACLE_PASSWORD=${{ secrets.ORACLE_PROD_PWD }}" > .env-prod
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }} ${{ env.DOCKER_REGISTRY }}
+            docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+            docker compose -f docker-compose.yml --env-file .env-prod -p smartcollect-prod up -d --force-recreate

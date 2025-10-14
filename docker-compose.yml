@@ -1,0 +1,74 @@
+#services:
+#  oracle-db:
+#    image: container-registry.oracle.com/database/free:latest
+#    container_name: oracle-db
+#    ports:
+#      - "1521:1521"
+#    environment:
+#      ORACLE_PWD: 110196
+#    restart: unless-stopped
+
+
+
+version: '3.8'
+
+services:
+  # 1. Serviço da Aplicação Java (smartcollect)
+  app:
+    # A instrução 'build: .' informa ao Docker para usar o Dockerfile que criamos
+    build: .
+    image: seu-usuario-docker/smartcollect-esg:latest # Nome final da imagem para o Docker Hub
+    container_name: smartcollect-app
+
+    # Mapeia a porta do host para a porta do container
+    ports:
+      - "${APP_PORT}:8080" # APP_PORT virá do seu arquivo .env
+
+    # Variáveis de ambiente para a aplicação Spring Boot
+    environment:
+      # URL de Conexão com o Oracle DB (o host é o nome do serviço: oracle-db)
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@oracle-db:1521/FREEPDB1 # Use FREEPDB1 ou o nome de seu PDB
+      SPRING_DATASOURCE_USERNAME: SYSTEM
+      SPRING_DATASOURCE_PASSWORD: ${ORACLE_PASSWORD} # Carregado do .env
+
+      # Otimização Java
+      JAVA_OPTS: "-XX:MinRAMPercentage=50.0 -XX:MaxRAMPercentage=75.0"
+
+    # Dependência: Garante que o banco comece antes da aplicação
+    depends_on:
+      - oracle-db
+
+    networks:
+      - smartcollect-network
+
+  # 2. Serviço do Banco de Dados Oracle (Baseado no seu código)
+  oracle-db:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: smartcollect-oracle-db
+
+    # Apenas para acessar de fora do Docker (opcional se a app usa a rede)
+    ports:
+      - "1521:1521"
+
+    # Variáveis de ambiente
+    environment:
+      # Senha do Oracle DB. Deve ser segura e carregada do .env
+      ORACLE_PWD: ${ORACLE_PASSWORD}
+
+    # Volume para persistir os dados do banco
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+
+    restart: unless-stopped
+    networks:
+      - smartcollect-network
+
+# ====================
+# CONFIGURAÇÃO DE REDES E VOLUMES (Requisito da Atividade)
+# ====================
+networks:
+  smartcollect-network:
+    driver: bridge # Rede interna para comunicação entre app e db
+
+volumes:
+  oracle-data: # Volume persistente para os dados do Oracle

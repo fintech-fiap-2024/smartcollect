@@ -1,0 +1,19 @@
+-- Sequência para Ponto de Coleta
+CREATE SEQUENCE SEQ_PONTO_COLETA
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE;
+
+-- Sequência para Resíduo
+CREATE SEQUENCE SEQ_RESIDUO
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE;
+
+-- Sequência para Descarte
+CREATE SEQUENCE SEQ_DESCARTE
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE;
+
+
