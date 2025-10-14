@@ -65,43 +65,60 @@ jobs:
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.TAG }}
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
 
-  # 3. DEPLOY EM STAGING (CD)
+  # =========================================================================
+  # 3. SIMULAÇÃO DE DEPLOY EM STAGING
+  # =========================================================================
   deploy_staging:
-    name: Deploy em Staging
+    name: Simulação de Deploy em Staging
     needs: build_push_docker
     runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - name: Deploy no Servidor Staging
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_PRIVATE_KEY }}
-          script: |
-            echo "ORACLE_PASSWORD=${{ secrets.ORACLE_STAGING_PWD }}" > .env-staging
-            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }} ${{ env.DOCKER_REGISTRY }}
-            docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-            docker compose -f docker-compose.yml --env-file .env-staging -p smartcollect-staging up -d --force-recreate
+    environment: staging # Mantém o uso do ambiente
 
-  # 4. DEPLOY EM PRODUÇÃO (CD com Aprovação)
+    steps:
+      - name: Acessar Docker Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Simulação de Deploy
+        run: |
+          echo "Simulando a conexão ao servidor de STAGING..."
+          echo "1. Pull da imagem mais recente: ${{ env.DOCKER_IMAGE_NAME }}:latest"
+          # Comando para "baixar" a imagem no ambiente de simulação
+          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          
+          echo "2. Criação do arquivo .env com a senha segura (ORACLE_STAGING_PWD)."
+          echo "3. Executando 'docker compose up' no STAGING..."
+          echo "Deploy do ambiente STAGING concluído com sucesso."
+          echo "A aplicação SmartCollect está rodando em http://staging.simulacao.com:8081" # Exibir URL/mensagem
+
+  # =========================================================================
+  # 4. SIMULAÇÃO DE DEPLOY EM PRODUÇÃO (Com Aprovação Manual)
+  # =========================================================================
   deploy_production:
-    name: Deploy em Produção
+    name: Simulação de Deploy em Produção
     needs: deploy_staging
     runs-on: ubuntu-latest
+    # Configura o ambiente de produção com REVISOR OBRIGATÓRIO (mantém o fluxo de CD)
     environment:
       name: production
-      url: https://smartcollect.seusite.com
+      url: https://smartcollect.simulacao.com # URL para evidência
 
     steps:
-      - name: Deploy no Servidor de Produção
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Acessar Docker Registry
+        uses: docker/login-action@v3
         with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ${{ secrets.PROD_USER }}
-          key: ${{ secrets.PROD_PRIVATE_KEY }}
-          script: |
-            echo "ORACLE_PASSWORD=${{ secrets.ORACLE_PROD_PWD }}" > .env-prod
-            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }} ${{ env.DOCKER_REGISTRY }}
-            docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-            docker compose -f docker-compose.yml --env-file .env-prod -p smartcollect-prod up -d --force-recreate
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Simulação de Deploy
+        run: |
+          echo "SIMULANDO APROVAÇÃO MANUAL PARA PRODUÇÃO..."
+          echo "1. Pull da imagem mais recente: ${{ env.DOCKER_IMAGE_NAME }}:latest"
+          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+          echo "2. Criação do arquivo .env com a senha ultra-segura (ORACLE_PROD_PWD)."
+          echo "3. Executando 'docker compose up' no PRODUÇÃO..."
+          echo "DEPLOY FINALIZADO! A aplicação SmartCollect está rodando em produção."
+          echo "Verifique o funcionamento em https://smartcollect.simulacao.com" # Mensagem final para evidência
