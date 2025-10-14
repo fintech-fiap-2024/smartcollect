@@ -30,8 +30,9 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
-      - name: Executar Build e Testes
-        run: mvn clean install
+      - name: Executar Build e Testes (Excluindo Banco de Dados)
+          # Usa um argumento Maven para desabilitar a conexão com o banco
+        run: mvn clean install -Dspring.profiles.active=test
       - name: Upload JAR como Artefato
         uses: actions/upload-artifact@v4
         with:
