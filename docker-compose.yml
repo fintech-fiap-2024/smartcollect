@@ -36,7 +36,8 @@ services:
 
     # Dependência: Garante que o banco comece antes da aplicação
     depends_on:
-      - oracle-db
+       oracle-db:
+          condition: service_healthy
 
     networks:
       - smartcollect-network
@@ -62,6 +63,12 @@ services:
     restart: unless-stopped
     networks:
       - smartcollect-network
+
+    healthcheck:
+      test: [ "CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s SYSTEM/${ORACLE_PWD}@localhost:1521/FREEPDB1" ]
+      interval: 20s
+      timeout: 10s
+      retries: 10
 
 # ====================
 # CONFIGURAÇÃO DE REDES E VOLUMES (Requisito da Atividade)
