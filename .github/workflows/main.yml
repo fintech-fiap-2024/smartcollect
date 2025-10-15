@@ -1,10 +1,11 @@
 name: CI/CD do Projeto SmartCollect
 
-# O pipeline é disparado sempre que houver um push na branch 'main'
+# O pipeline é disparado em push nas branches 'main' (produção) e 'dev' (staging)
 on:
   push:
     branches:
       - main
+      - dev # Nova branch para o ambiente de Staging (Dev)
 
 env:
   # Nome da Imagem no Docker Hub - Use seu nome de usuário em minúsculas
@@ -18,10 +19,7 @@ jobs:
     name: Build e Testes com Maven (Oracle Integration)
     runs-on: ubuntu-latest
 
-    # =========================================================================
-    # SERVICE CONTAINERS: INICIA O ORACLE DB PARA TESTES DE INTEGRAÇÃO
-    # O nome 'oracle-db' é o HOST resolvível para o Spring Boot
-    # =========================================================================
+    # Esta etapa de CI/Teste é obrigatória para AMBAS as branches
     services:
       oracle-db:
         image: container-registry.oracle.com/database/free:latest
@@ -38,48 +36,33 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # CORREÇÃO FINAL: Espera Ativa, Captura de ID e Confirmação de Conexão
-      - name: Esperar Oracle DB e Confirmar Conexão
-        id: wait_db
+      # Health Check Simples de Porta (Melhor abordagem para GHA Services)
+      - name: Esperar a Inicialização do Oracle DB (Health Check de Porta)
         run: |
-          echo "Testando conexão com o Oracle DB..."
+          echo "Aguardando 15 segundos iniciais para o contêiner Oracle ligar..."
+          sleep 15
           
-          # 1. Captura o ID do contêiner real, necessário para o 'docker exec'
-          # Usamos o nome de host 'oracle-db' para filtrar o ID.
-          CONTAINER_ID=$(docker ps -aqf "name=oracle-db")
+          # Instala o netcat (nc), necessário para o health check
+          sudo apt-get update && sudo apt-get install -y netcat
           
-          if [ -z "$CONTAINER_ID" ]; then
-            echo "Erro: Não foi possível encontrar o contêiner Docker 'oracle-db'."
-            exit 1
-          fi
+          # Testa a conexão da porta a cada 6 segundos, com timeout (30 tentativas = 180s)
+          for i in $(seq 1 30); do
+            nc -z oracle-db 1521
           
-          echo "Contêiner 'oracle-db' encontrado com ID: $CONTAINER_ID. Iniciando loop de conexão..."
-          
-          # Passa a senha do secret para uma variável shell para o docker exec
-          ORACLE_PASS="${{ secrets.ORACLE_TEST_PASSWORD }}"
-          
-          # 2. Loop de espera ativa, usando o ID do contêiner
-          for i in $(seq 1 40); do
-            # O comando docker exec usa o ID capturado
-            # Executa o sqlplus dentro do container, testando a conexão com 'localhost'.
-            docker exec "$CONTAINER_ID" sh -c "sqlplus system/\${ORACLE_PASS}@//localhost:1521/FREEPDB1 -S <<< 'SELECT 1 FROM DUAL;'"
-          
-            # Verifica o código de saída do sqlplus
             if [ $? -eq 0 ]; then
-              echo "Conexão com o banco de dados Oracle estabelecida com sucesso após $i tentativas."
-              exit 0 
+              echo "A porta 1521 do Oracle DB está aberta. Prosseguindo."
+              exit 0
             fi
           
-            echo "Tentativa $i falhou. Aguardando 6 segundos..."
+            echo "Tentativa $i falhou. Porta 1521 ainda não está aberta. Aguardando 6 segundos..."
             sleep 6
           done
           
-          echo "Erro: Não foi possível conectar ao Oracle DB após múltiplas tentativas (timeout)."
-          exit 1 
+          echo "Erro: A porta 1521 do Oracle DB não abriu após múltiplas tentativas (timeout)."
+          exit 1
 
       - name: Executar Build e Testes (Conectando ao Oracle DB)
         env:
-          # A URL APONTA PARA O NOME DO SERVIÇO: 'oracle-db'
           SPRING_DATASOURCE_URL: jdbc:oracle:thin:@oracle-db:1521/FREEPDB1
           SPRING_DATASOURCE_USERNAME: SYSTEM
           SPRING_DATASOURCE_PASSWORD: ${{ secrets.ORACLE_TEST_PASSWORD }}
@@ -118,11 +101,16 @@ jobs:
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.TAG }}
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
 
-  # 3. SIMULAÇÃO DE DEPLOY EM STAGING
+  # =========================================================================
+  # 3. DEPLOY PARA STAGING (Branch 'dev')
+  # =========================================================================
   deploy_staging:
-    name: Simulação de Deploy em Staging
+    name: Deploy para Staging
     needs: build_push_docker
     runs-on: ubuntu-latest
+
+    # CORREÇÃO: Só executa se a branch for 'dev'
+    if: github.ref == 'refs/heads/dev'
     environment: staging
 
     steps:
@@ -132,19 +120,29 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Simulação de Deploy
+      - name: Simulação de Deploy na Azure (Ambiente Staging)
         run: |
-          echo "Simulando a conexão ao servidor de STAGING..."
-          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-          echo "Deploy do ambiente STAGING concluído com sucesso."
+          echo "---------------------------------------------------------"
+          echo "SIMULAÇÃO DE DEPLOY: AMBIENTE STAGING (Branch: ${{ github.ref_name }})"
+          echo "A imagem mais recente (tag: ${{ env.TAG }}) seria implantada na Azure."
+          echo "Comandos de Deploy (Simulação):"
+          echo "  > docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest"
+          echo "  > az webapp deployment source config --name smartcollect-staging --resource-group meu-grupo-rg --container-image-name ${{ env.DOCKER_IMAGE_NAME }}"
+          echo "---------------------------------------------------------"
 
-  # 4. SIMULAÇÃO DE DEPLOY EM PRODUÇÃO (Com Aprovação Manual)
+  # 4. DEPLOY PARA PRODUÇÃO (Branch 'main')
   deploy_production:
-    name: Simulação de Deploy em Produção
+    name: Deploy para Produção
     needs: deploy_staging
     runs-on: ubuntu-latest
+
+    # Condição de execução: Somente na branch 'main'
+    if: github.ref == 'refs/heads/main'
+
+    # ATENÇÃO: Combina o nome do ambiente, a URL e a aprovação manual
     environment:
       name: production
+      # A URL deve ser definida no ambiente 'production' do seu repositório
       url: https://smartcollect.simulacao.com
 
     steps:
@@ -154,8 +152,12 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Simulação de Deploy
+      - name: Simulação de Deploy na Azure (Ambiente Produção)
         run: |
-          echo "SIMULANDO APROVAÇÃO MANUAL PARA PRODUÇÃO..."
-          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-          echo "DEPLOY FINALIZADO! A aplicação SmartCollect está rodando em produção."
+          echo "---------------------------------------------------------"
+          echo "SIMULAÇÃO DE DEPLOY: AMBIENTE PRODUÇÃO (Branch: ${{ github.ref_name }})"
+          echo "Após aprovação manual, a imagem mais recente (tag: ${{ env.TAG }}) seria implantada na Azure."
+          echo "Comandos de Deploy (Simulação):"
+          echo "  > docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest"
+          echo "  > az webapp deployment source config --name smartcollect-production --resource-group meu-grupo-rg --container-image-name ${{ env.DOCKER_IMAGE_NAME }}"
+          echo "---------------------------------------------------------"
