@@ -12,7 +12,7 @@ on:
 
 env:
   # Nome da Imagem no Docker Hub - SUBSTITUA PELO SEU USUÁRIO
-  DOCKER_IMAGE_NAME: system/smartcollect-esg
+  DOCKER_IMAGE_NAME: geovani237/smartcollect-esg
   DOCKER_REGISTRY: docker.io
   TAG: ${{ github.sha }}
 

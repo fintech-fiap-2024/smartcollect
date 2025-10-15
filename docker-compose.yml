@@ -17,7 +17,7 @@ services:
   app:
     # A instrução 'build: .' informa ao Docker para usar o Dockerfile que criamos
     build: .
-    image: seu-usuario-docker/smartcollect-esg:latest # Nome final da imagem para o Docker Hub
+    image: geovani237/smartcollect-esg:latest # Nome final da imagem para o Docker Hub
     container_name: smartcollect-app
 
     # Mapeia a porta do host para a porta do container
