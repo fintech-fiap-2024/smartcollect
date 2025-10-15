@@ -7,56 +7,20 @@ on:
       - staging
 
 jobs:
-  # ===============================
-  # 1️⃣ Build e Testes com PostgreSQL
-  # ===============================
   build_and_test:
     name: Build e Testes
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: smartcollect_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
     steps:
       - name: Checkout do Código
         uses: actions/checkout@v4
-
       - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
-      - name: Aguardar o banco PostgreSQL ficar pronto
-        run: |
-          for i in {1..10}; do
-            nc -z localhost 5432 && echo "Postgres OK!" && break
-            echo "Aguardando Postgres..."
-            sleep 5
-          done
-
       - name: Build e Testes
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/smartcollect_test
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
-        run: mvn clean verify
+        run: mvn clean install
 
-  # ===============================
-  # 2️⃣ Build e Push da Imagem Docker
-  # ===============================
   docker_build_and_push:
     name: Build e Push Docker
     needs: build_and_test
@@ -64,26 +28,20 @@ jobs:
     steps:
       - name: Checkout do Código
         uses: actions/checkout@v4
-
       - name: Login no Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Build da Imagem Docker
         run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/smartcollect:${{ github.sha }} .
-
       - name: Push da Imagem Docker
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/smartcollect:${{ github.sha }}
 
-  # ===============================
-  # 3️⃣ Deploy em Cloud (ajustável)
-  # ===============================
   deploy_cloud:
     name: Deploy em Cloud
     needs: docker_build_and_push
     runs-on: ubuntu-latest
     steps:
       - name: Deploy para Plataforma Cloud
-        run: echo "Adapte este passo para Railway, Render, ou Google Cloud Run usando a imagem ${{ secrets.DOCKERHUB_USERNAME }}/smartcollect:${{ github.sha }}"
+        run: echo "Adapte este passo para sua plataforma de deploy (Railway, Render, Google Cloud Run, etc) usando a imagem ${{ secrets.DOCKERHUB_USERNAME }}/smartcollect:${{ github.sha }}"
