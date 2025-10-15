@@ -26,13 +26,11 @@ jobs:
       oracle-db:
         image: container-registry.oracle.com/database/free:latest
         ports:
-          - 1521:1521/tcp # Mapeia a porta
+          - 1521:1521/tcp
         environment:
-          # A senha do container Oracle é definida pela Secret
           ORACLE_PWD: ${{ secrets.ORACLE_TEST_PASSWORD }}
-        # CORREÇÃO DE SINTAXE YAM: O valor complexo deve ser mantido em uma única string
-        options: >
-          --health-cmd "sqlplus sys/\"${{ secrets.ORACLE_TEST_PASSWORD }}\"@//localhost:1521/FREEPDB1 AS SYSDBA -S <<< 'SELECT 1 FROM DUAL;' && exit 0 || exit 1" --health-interval 5s --health-timeout 10s --health-retries 12
+        # CORREÇÃO: Usa aspas simples para garantir que a linha de comando seja tratada como uma string única.
+        options: '--health-cmd "sqlplus sys/\"${{ secrets.ORACLE_TEST_PASSWORD }}\"@//localhost:1521/FREEPDB1 AS SYSDBA -S <<< 'SELECT 1 FROM DUAL;' && exit 0 || exit 1" --health-interval 5s --health-timeout 10s --health-retries 12'
 
     steps:
       - name: Checkout do Código
@@ -45,7 +43,6 @@ jobs:
           cache: 'maven'
 
       - name: Executar Build e Testes (Conectando ao Oracle DB)
-        # As variáveis de ambiente sobrescrevem a configuração local (localhost)
         env:
           # A URL APONTA PARA O NOME DO SERVIÇO: 'oracle-db'
           SPRING_DATASOURCE_URL: jdbc:oracle:thin:@oracle-db:1521/FREEPDB1
@@ -142,4 +139,4 @@ jobs:
           echo "2. Criação do arquivo .env com a senha ultra-segura (ORACLE_PROD_PWD)."
           echo "3. Executando 'docker compose up' no PRODUÇÃO..."
           echo "DEPLOY FINALIZADO! A aplicação SmartCollect está rodando em produção."
-          echo "Verifique o funcionamento em https://smartcollect.simulacao.com" # Mensagem final para evidência```eof
+          echo "Verifique o funcionamento em https://smartcollect.simulacao.com" # Mensagem final para evidência
