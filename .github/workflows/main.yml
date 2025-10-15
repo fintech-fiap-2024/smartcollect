@@ -20,13 +20,16 @@ jobs:
 
     # =========================================================================
     # SERVICE CONTAINERS: INICIA O ORACLE DB PARA TESTES DE INTEGRAÇÃO
+    # O nome 'oracle-db' é o HOST resolvível para o Spring Boot
     # =========================================================================
     services:
-      # O nome 'oracle-db' se torna o HOST que o Spring Boot usará
       oracle-db:
         image: container-registry.oracle.com/database/free:latest
         ports:
           - 1521:1521/tcp
+        environment:
+          ORACLE_PWD: ${{ secrets.ORACLE_TEST_PASSWORD }}
+
     steps:
       - name: Checkout do Código
         uses: actions/checkout@v4
@@ -38,33 +41,44 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # CORREÇÃO PRINCIPAL: Espera Ativa para Resolver Conexão/DNS
+      # CORREÇÃO FINAL: Espera Ativa, Captura de ID e Confirmação de Conexão
       - name: Esperar Oracle DB e Confirmar Conexão
+        id: wait_db
         run: |
-          echo "Testando conexão com o Oracle DB em 'oracle-db:1521/FREEPDB1'..."
+          echo "Testando conexão com o Oracle DB..."
           
-          # Passa a senha do secret para uma variável shell para o docker exec usar
+          # 1. Captura o ID do contêiner real, necessário para o 'docker exec'
+          # Usamos o nome de host 'oracle-db' para filtrar o ID.
+          CONTAINER_ID=$(docker ps -aqf "name=oracle-db")
+          
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Erro: Não foi possível encontrar o contêiner Docker 'oracle-db'."
+            exit 1
+          fi
+          
+          echo "Contêiner 'oracle-db' encontrado com ID: $CONTAINER_ID. Iniciando loop de conexão..."
+          
+          # Passa a senha do secret para uma variável shell para o docker exec
           ORACLE_PASS="${{ secrets.ORACLE_TEST_PASSWORD }}"
           
-          # Loop para tentar a conexão (timeout após ~4 minutos)
+          # 2. Loop de espera ativa, usando o ID do contêiner
           for i in $(seq 1 40); do
-          
-            # Executa o sqlplus dentro do container 'oracle-db' para checar a saúde
-            # Usamos '\${ORACLE_PASS}' para o docker exec expandir a variável
-            docker exec oracle-db sh -c "sqlplus system/\${ORACLE_PASS}@//localhost:1521/FREEPDB1 -S <<< 'SELECT 1 FROM DUAL;'"
+            # O comando docker exec usa o ID capturado
+            # Executa o sqlplus dentro do container, testando a conexão com 'localhost'.
+            docker exec "$CONTAINER_ID" sh -c "sqlplus system/\${ORACLE_PASS}@//localhost:1521/FREEPDB1 -S <<< 'SELECT 1 FROM DUAL;'"
           
             # Verifica o código de saída do sqlplus
             if [ $? -eq 0 ]; then
-              echo "Conexão com o banco de dados Oracle estabelecida com sucesso."
-              exit 0 # Sai do loop com sucesso
+              echo "Conexão com o banco de dados Oracle estabelecida com sucesso após $i tentativas."
+              exit 0 
             fi
           
             echo "Tentativa $i falhou. Aguardando 6 segundos..."
             sleep 6
           done
           
-          echo "Erro: Não foi possível conectar ao Oracle DB após múltiplas tentativas."
-          exit 1 # Falha no job se o timeout for atingido
+          echo "Erro: Não foi possível conectar ao Oracle DB após múltiplas tentativas (timeout)."
+          exit 1 
 
       - name: Executar Build e Testes (Conectando ao Oracle DB)
         env:
