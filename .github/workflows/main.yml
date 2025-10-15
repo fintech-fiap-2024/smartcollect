@@ -27,9 +27,6 @@ jobs:
         image: container-registry.oracle.com/database/free:latest
         ports:
           - 1521:1521/tcp
-        environment:
-          ORACLE_PWD: ${{ secrets.ORACLE_TEST_PASSWORD }}
-
     steps:
       - name: Checkout do Código
         uses: actions/checkout@v4
