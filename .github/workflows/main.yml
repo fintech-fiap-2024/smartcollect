@@ -1,25 +1,21 @@
 name: CI/CD do Projeto SmartCollect
 
-# O pipeline é disparado em push nas branches 'main' (produção) e 'dev' (staging)
 on:
   push:
     branches:
       - main
-      - dev # Nova branch para o ambiente de Staging (Dev)
+      - dev
 
 env:
-  # Nome da Imagem no Docker Hub - Use seu nome de usuário em minúsculas
   DOCKER_IMAGE_NAME: geovani237/smartcollect-esg
   DOCKER_REGISTRY: docker.io
   TAG: ${{ github.sha }}
 
 jobs:
-  # 1. BUILD E TESTES AUTOMATIZADOS (CI)
   build_and_test:
     name: Build e Testes com Maven (Oracle Integration)
     runs-on: ubuntu-latest
 
-    # Esta etapa de CI/Teste é obrigatória para AMBAS as branches
     services:
       oracle-db:
         image: container-registry.oracle.com/database/free:latest
@@ -36,7 +32,6 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # Health Check Simples de Porta (Melhor abordagem para GHA Services)
       - name: Esperar a Inicialização do Oracle DB (Health Check de Porta)
         run: |
           echo "Aguardando 15 segundos iniciais para o contêiner Oracle ligar..."
@@ -74,7 +69,6 @@ jobs:
           name: application-jar
           path: target/smartcollect-0.0.1-SNAPSHOT.jar
 
-  # 2. BUILD E PUSH DA IMAGEM DOCKER
   build_push_docker:
     name: Build e Push da Imagem
     needs: build_and_test
@@ -101,15 +95,11 @@ jobs:
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.TAG }}
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
 
-  # =========================================================================
-  # 3. DEPLOY PARA STAGING (Branch 'dev')
-  # =========================================================================
   deploy_staging:
     name: Deploy para Staging
     needs: build_push_docker
     runs-on: ubuntu-latest
 
-    # CORREÇÃO: Só executa se a branch for 'dev'
     if: github.ref == 'refs/heads/dev'
     environment: staging
 
@@ -130,19 +120,15 @@ jobs:
           echo "  > az webapp deployment source config --name smartcollect-staging --resource-group meu-grupo-rg --container-image-name ${{ env.DOCKER_IMAGE_NAME }}"
           echo "---------------------------------------------------------"
 
-  # 4. DEPLOY PARA PRODUÇÃO (Branch 'main')
   deploy_production:
     name: Deploy para Produção
     needs: deploy_staging
     runs-on: ubuntu-latest
 
-    # Condição de execução: Somente na branch 'main'
     if: github.ref == 'refs/heads/main'
 
-    # ATENÇÃO: Combina o nome do ambiente, a URL e a aprovação manual
     environment:
       name: production
-      # A URL deve ser definida no ambiente 'production' do seu repositório
       url: https://smartcollect.simulacao.com
 
     steps:
