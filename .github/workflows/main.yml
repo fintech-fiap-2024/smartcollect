@@ -1,23 +1,16 @@
-# =========================================================================
-# ARQUIVO: .github/workflows/main.yml
-# =========================================================================
-
 name: CI/CD do Projeto SmartCollect
 
-# O pipeline é disparado sempre que houver um push na branch 'main'
 on:
   push:
     branches:
       - main
 
 env:
-  # Nome da Imagem no Docker Hub - SUBSTITUA PELO SEU USUÁRIO
   DOCKER_IMAGE_NAME: SYSTEM/smartcollect-esg
   DOCKER_REGISTRY: docker.io
   TAG: ${{ github.sha }}
 
 jobs:
-  # 1. BUILD E TESTES AUTOMATIZADOS (CI)
   build_and_test:
     name: Build e Testes com Maven
     runs-on: ubuntu-latest
@@ -38,7 +31,6 @@ jobs:
           name: application-jar
           path: target/smartcollect-0.0.1-SNAPSHOT.jar
 
-  # 2. BUILD E PUSH DA IMAGEM DOCKER
   build_push_docker:
     name: Build e Push da Imagem
     needs: build_and_test
@@ -65,7 +57,6 @@ jobs:
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.TAG }}
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
 
-  # 3. DEPLOY EM STAGING (CD)
   deploy_staging:
     name: Deploy em Staging
     needs: build_push_docker
@@ -84,7 +75,6 @@ jobs:
             docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
             docker compose -f docker-compose.yml --env-file .env-staging -p smartcollect-staging up -d --force-recreate
 
-  # 4. DEPLOY EM PRODUÇÃO (CD com Aprovação)
   deploy_production:
     name: Deploy em Produção
     needs: deploy_staging
