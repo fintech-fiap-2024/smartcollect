@@ -20,6 +20,8 @@ jobs:
 
     # =========================================================================
     # SERVICE CONTAINERS: INICIA O ORACLE DB PARA TESTES DE INTEGRAÇÃO
+    # CORREÇÃO APLICADA: Removido o complexo 'options' para evitar erros de escaping.
+    # Adicionamos um 'sleep' no passo para aguardar a inicialização lenta do Oracle.
     # =========================================================================
     services:
       # O nome 'oracle-db' se torna o HOST que o Spring Boot usará
@@ -29,18 +31,25 @@ jobs:
           - 1521:1521/tcp
         environment:
           ORACLE_PWD: ${{ secrets.ORACLE_TEST_PASSWORD }}
-        # CORREÇÃO: Usa aspas simples para garantir que a linha de comando seja tratada como uma string única.
-        options: '--health-cmd "sqlplus sys/\"${{ secrets.ORACLE_TEST_PASSWORD }}\"@//localhost:1521/FREEPDB1 AS SYSDBA -S <<< 'SELECT 1 FROM DUAL;' && exit 0 || exit 1" --health-interval 5s --health-timeout 10s --health-retries 12'
+        # options: (REMOVIDO PARA USAR ESPERA MANUAL)
 
     steps:
       - name: Checkout do Código
         uses: actions/checkout@v4
+
       - name: Setup JDK 21 e Cache Maven
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+
+      # PASSO DE CORREÇÃO: ESPERAR O BANCO DE DADOS ORACLE ESTAR TOTALMENTE PRONTO
+      - name: Aguardar Inicialização do Oracle DB (120s)
+        run: |
+          echo "O contêiner Oracle DB Free é lento. Aguardando 120 segundos para o banco estar pronto..."
+          sleep 120
+          echo "Iniciando build e testes de integração."
 
       - name: Executar Build e Testes (Conectando ao Oracle DB)
         env:
@@ -103,7 +112,6 @@ jobs:
         run: |
           echo "Simulando a conexão ao servidor de STAGING..."
           echo "1. Pull da imagem mais recente: ${{ env.DOCKER_IMAGE_NAME }}:latest"
-          # Comando para "baixar" a imagem no ambiente de simulação
           docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
           
           echo "2. Criação do arquivo .env com a senha segura (ORACLE_STAGING_PWD)."
