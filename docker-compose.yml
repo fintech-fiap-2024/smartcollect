@@ -28,7 +28,7 @@ services:
     environment:
       # URL de Conexão com o Oracle DB (o host é o nome do serviço: oracle-db)
       SPRING_DATASOURCE_URL: jdbc:oracle:thin:@oracle-db:1521/FREEPDB1 # Use FREEPDB1 ou o nome de seu PDB
-      SPRING_DATASOURCE_USERNAME: SYSTEM
+      SPRING_DATASOURCE_USERNAME: rm557121
       SPRING_DATASOURCE_PASSWORD: ${ORACLE_PASSWORD} # Carregado do .env
 
       # Otimização Java
