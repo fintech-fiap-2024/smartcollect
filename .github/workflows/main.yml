@@ -17,11 +17,11 @@ jobs:
   build_and_test:
     name: Build e Testes com Maven (Oracle Integration)
     runs-on: ubuntu-latest
+    # CORREÇÃO APLICADA: O bloco 'environment' foi removido deste job, pois não se trata de um deploy.
+    # Apenas 'runs-on' é necessário para definir o runner.
 
     # =========================================================================
     # SERVICE CONTAINERS: INICIA O ORACLE DB PARA TESTES DE INTEGRAÇÃO
-    # CORREÇÃO APLICADA: Removido o complexo 'options' para evitar erros de escaping.
-    # Adicionamos um 'sleep' no passo para aguardar a inicialização lenta do Oracle.
     # =========================================================================
     services:
       # O nome 'oracle-db' se torna o HOST que o Spring Boot usará
@@ -31,7 +31,7 @@ jobs:
           - 1521:1521/tcp
         environment:
           ORACLE_PWD: ${{ secrets.ORACLE_TEST_PASSWORD }}
-        # options: (REMOVIDO PARA USAR ESPERA MANUAL)
+        # options: (Removido para usar espera manual e aumentar a estabilidade)
 
     steps:
       - name: Checkout do Código
@@ -44,7 +44,7 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # PASSO DE CORREÇÃO: ESPERAR O BANCO DE DADOS ORACLE ESTAR TOTALMENTE PRONTO
+      # CORREÇÃO: Passo de espera adicionado para resolver a lentidão de inicialização do Oracle DB
       - name: Aguardar Inicialização do Oracle DB (120s)
         run: |
           echo "O contêiner Oracle DB Free é lento. Aguardando 120 segundos para o banco estar pronto..."
@@ -99,7 +99,7 @@ jobs:
     name: Simulação de Deploy em Staging
     needs: build_push_docker
     runs-on: ubuntu-latest
-    environment: staging # Mantém o uso do ambiente
+    environment: staging # CORRETO: Uso de environment em job de deploy
 
     steps:
       - name: Acessar Docker Registry
@@ -126,7 +126,7 @@ jobs:
     name: Simulação de Deploy em Produção
     needs: deploy_staging
     runs-on: ubuntu-latest
-    # Configura o ambiente de produção com REVISOR OBRIGATÓRIO (mantém o fluxo de CD)
+    # CORRETO: Uso de environment em job de deploy com URL
     environment:
       name: production
       url: https://smartcollect.simulacao.com # URL para evidência
