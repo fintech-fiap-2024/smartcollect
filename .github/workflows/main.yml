@@ -30,13 +30,9 @@ jobs:
         environment:
           # A senha do container Oracle é definida pela Secret
           ORACLE_PWD: ${{ secrets.ORACLE_TEST_PASSWORD }}
-        # Espera que o banco de dados esteja pronto (healthy) para rodar os testes
+        # CORREÇÃO DE SINTAXE YAM: O valor complexo deve ser mantido em uma única string
         options: >
-          # CORREÇÃO: Usamos aspas duplas (") ao redor da Secret no health-cmd
-          --health-cmd "sqlplus sys/\"${{ secrets.ORACLE_TEST_PASSWORD }}\"@//localhost:1521/FREEPDB1 AS SYSDBA -S <<< 'SELECT 1 FROM DUAL;' && exit 0 || exit 1"
-          --health-interval 5s
-          --health-timeout 10s
-          --health-retries 12
+          --health-cmd "sqlplus sys/\"${{ secrets.ORACLE_TEST_PASSWORD }}\"@//localhost:1521/FREEPDB1 AS SYSDBA -S <<< 'SELECT 1 FROM DUAL;' && exit 0 || exit 1" --health-interval 5s --health-timeout 10s --health-retries 12
 
     steps:
       - name: Checkout do Código
@@ -146,4 +142,4 @@ jobs:
           echo "2. Criação do arquivo .env com a senha ultra-segura (ORACLE_PROD_PWD)."
           echo "3. Executando 'docker compose up' no PRODUÇÃO..."
           echo "DEPLOY FINALIZADO! A aplicação SmartCollect está rodando em produção."
-          echo "Verifique o funcionamento em https://smartcollect.simulacao.com" # Mensagem final para evidência
+          echo "Verifique o funcionamento em https://smartcollect.simulacao.com" # Mensagem final para evidência```eof
