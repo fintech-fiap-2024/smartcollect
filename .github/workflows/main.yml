@@ -32,7 +32,8 @@ jobs:
           ORACLE_PWD: ${{ secrets.ORACLE_TEST_PASSWORD }}
         # Espera que o banco de dados esteja pronto (healthy) para rodar os testes
         options: >
-          --health-cmd "sqlplus sys/${{ secrets.ORACLE_TEST_PASSWORD }}@//localhost:1521/FREEPDB1 AS SYSDBA -S <<< 'SELECT 1 FROM DUAL;' && exit 0 || exit 1"
+          # CORREÇÃO: Usamos aspas duplas (") ao redor da Secret no health-cmd
+          --health-cmd "sqlplus sys/\"${{ secrets.ORACLE_TEST_PASSWORD }}\"@//localhost:1521/FREEPDB1 AS SYSDBA -S <<< 'SELECT 1 FROM DUAL;' && exit 0 || exit 1"
           --health-interval 5s
           --health-timeout 10s
           --health-retries 12
