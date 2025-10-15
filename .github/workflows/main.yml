@@ -17,8 +17,6 @@ jobs:
   build_and_test:
     name: Build e Testes com Maven (Oracle Integration)
     runs-on: ubuntu-latest
-    # CORREÇÃO APLICADA: O bloco 'environment' foi removido deste job, pois não se trata de um deploy.
-    # Apenas 'runs-on' é necessário para definir o runner.
 
     # =========================================================================
     # SERVICE CONTAINERS: INICIA O ORACLE DB PARA TESTES DE INTEGRAÇÃO
@@ -40,12 +38,33 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # CORREÇÃO: Passo de espera adicionado para resolver a lentidão de inicialização do Oracle DB
-      - name: Aguardar Inicialização do Oracle DB (120s)
+      # CORREÇÃO PRINCIPAL: Espera Ativa para Resolver Conexão/DNS
+      - name: Esperar Oracle DB e Confirmar Conexão
         run: |
-          echo "O contêiner Oracle DB Free é lento. Aguardando 120 segundos para o banco estar pronto..."
-          sleep 120
-          echo "Iniciando build e testes de integração."
+          echo "Testando conexão com o Oracle DB em 'oracle-db:1521/FREEPDB1'..."
+          
+          # Passa a senha do secret para uma variável shell para o docker exec usar
+          ORACLE_PASS="${{ secrets.ORACLE_TEST_PASSWORD }}"
+          
+          # Loop para tentar a conexão (timeout após ~4 minutos)
+          for i in $(seq 1 40); do
+          
+            # Executa o sqlplus dentro do container 'oracle-db' para checar a saúde
+            # Usamos '\${ORACLE_PASS}' para o docker exec expandir a variável
+            docker exec oracle-db sh -c "sqlplus system/\${ORACLE_PASS}@//localhost:1521/FREEPDB1 -S <<< 'SELECT 1 FROM DUAL;'"
+          
+            # Verifica o código de saída do sqlplus
+            if [ $? -eq 0 ]; then
+              echo "Conexão com o banco de dados Oracle estabelecida com sucesso."
+              exit 0 # Sai do loop com sucesso
+            fi
+          
+            echo "Tentativa $i falhou. Aguardando 6 segundos..."
+            sleep 6
+          done
+          
+          echo "Erro: Não foi possível conectar ao Oracle DB após múltiplas tentativas."
+          exit 1 # Falha no job se o timeout for atingido
 
       - name: Executar Build e Testes (Conectando ao Oracle DB)
         env:
@@ -88,14 +107,12 @@ jobs:
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.TAG }}
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
 
-  # =========================================================================
   # 3. SIMULAÇÃO DE DEPLOY EM STAGING
-  # =========================================================================
   deploy_staging:
     name: Simulação de Deploy em Staging
     needs: build_push_docker
     runs-on: ubuntu-latest
-    environment: staging # CORRETO: Uso de environment em job de deploy
+    environment: staging
 
     steps:
       - name: Acessar Docker Registry
@@ -107,25 +124,17 @@ jobs:
       - name: Simulação de Deploy
         run: |
           echo "Simulando a conexão ao servidor de STAGING..."
-          echo "1. Pull da imagem mais recente: ${{ env.DOCKER_IMAGE_NAME }}:latest"
           docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-          
-          echo "2. Criação do arquivo .env com a senha segura (ORACLE_STAGING_PWD)."
-          echo "3. Executando 'docker compose up' no STAGING..."
           echo "Deploy do ambiente STAGING concluído com sucesso."
-          echo "A aplicação SmartCollect está rodando em http://staging.simulacao.com:8081" # Exibir URL/mensagem
 
-  # =========================================================================
   # 4. SIMULAÇÃO DE DEPLOY EM PRODUÇÃO (Com Aprovação Manual)
-  # =========================================================================
   deploy_production:
     name: Simulação de Deploy em Produção
     needs: deploy_staging
     runs-on: ubuntu-latest
-    # CORRETO: Uso de environment em job de deploy com URL
     environment:
       name: production
-      url: https://smartcollect.simulacao.com # URL para evidência
+      url: https://smartcollect.simulacao.com
 
     steps:
       - name: Acessar Docker Registry
@@ -137,10 +146,5 @@ jobs:
       - name: Simulação de Deploy
         run: |
           echo "SIMULANDO APROVAÇÃO MANUAL PARA PRODUÇÃO..."
-          echo "1. Pull da imagem mais recente: ${{ env.DOCKER_IMAGE_NAME }}:latest"
           docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-
-          echo "2. Criação do arquivo .env com a senha ultra-segura (ORACLE_PROD_PWD)."
-          echo "3. Executando 'docker compose up' no PRODUÇÃO..."
           echo "DEPLOY FINALIZADO! A aplicação SmartCollect está rodando em produção."
-          echo "Verifique o funcionamento em https://smartcollect.simulacao.com" # Mensagem final para evidência
